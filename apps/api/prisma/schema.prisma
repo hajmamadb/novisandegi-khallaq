@@ -1,0 +1,1174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  NOVICE
+  CRAFTSPERSON
+  CREATIVE
+  PROFESSIONAL
+  MENTOR
+  EDITOR
+  ADMIN
+}
+
+enum ExerciseCategory {
+  BASIC
+  STRUCTURE
+  STYLE
+  ADVANCED
+  IDEA
+  CONSTRAINT
+  HABIT
+  SCENE
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  ABANDONED
+  SUSPENDED
+}
+
+enum DraftSaveTrigger {
+  AUTO
+  MANUAL
+  SUBMIT
+}
+
+enum BankType {
+  CHARACTER
+  PLACE
+  OPENING_LINE
+  STYLE_PARAGRAPH
+  REFERENCE_STORY
+  NEWS
+  IMAGE
+  OBJECT
+  EMOTION
+  WHAT_IF
+  STRUCTURE_PHRASE
+  WORD
+  CUTUP_TEXT
+  AMBIENT_AUDIO
+  STRUCTURE_TEMPLATE
+  DICTIONARY
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+enum BadgeFamily {
+  STREAK
+  MILESTONE
+  SKILL
+  EXPLORATION
+  QUALITY
+  COMMUNITY
+  HIDDEN
+}
+
+enum BadgeTier {
+  BRONZE
+  SILVER
+  GOLD
+  DIAMOND
+  SPECIAL
+}
+
+enum VerificationLevel {
+  A_AUTOMATIC
+  B_SAMPLED
+  C_MENTOR
+  D_PEER
+  E_EDITOR
+  F_MANUAL
+}
+
+enum StreakDayStatus {
+  ACTIVE
+  FREEZE
+  REST
+  MISSED
+}
+
+enum AnomalyType {
+  PASTE_ABUSE
+  TYPING_SPEED
+  VOCABULARY_LOW
+  LANGUAGE_MISMATCH
+  SIMILARITY_BANK
+  SELF_REPEAT
+  SUSPICIOUS_TIME
+  VOTE_MANIPULATION
+  VOLUME_SPIKE
+}
+
+enum AnomalySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IntegrityCheckType {
+  PASTE
+  TYPING_SPEED
+  VOCABULARY
+  LANGUAGE
+  SIMILARITY_BANK
+  SELF_REPEAT
+  ACTIVE_TIME
+}
+
+enum IntegrityResult {
+  PASSED
+  WARNING
+  FLAGGED
+}
+
+enum SeriesType {
+  SENSES
+  PERSPECTIVE
+  MORNING_PAGES
+  WORD_GOAL
+}
+
+enum SeriesStatus {
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+}
+
+enum SelectionAlgorithm {
+  SHUFFLE_BAG
+  WEIGHTED_RANDOM
+  CONDITIONAL
+  PURE_RANDOM
+  STRATIFIED
+  RECOMMENDATION
+}
+
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  email          String   @unique
+  passwordHash   String   @map("password_hash")
+  displayName    String   @map("display_name") @db.VarChar(100)
+  role           UserRole @default(NOVICE)
+  level          Int      @default(1)
+  emailVerified  Boolean  @default(false) @map("email_verified")
+  isActive       Boolean  @default(true) @map("is_active")
+  settingsJson   Json     @default("{}") @map("settings_json")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  sessions       ExerciseSession[]
+  drafts         Draft[]
+  submissions    Submission[]
+  events         EventLog[]
+  userStats      UserStats?
+  userSkills     UserSkill[]
+  streakDays     StreakDay[]
+  badges         BadgeAward[]
+  badgeProgress  BadgeProgress[]
+  userCycles     UserCycle[]
+  selectionLogs  SelectionLog[]
+  xpLedger       XPLedger[]
+  inkTransactions InkTransaction[]
+  anomalies      AnomalyFlag[]
+  series         ExerciseSeries[]
+  recommendations RecommendationQueue[]
+  notifications  Notification[]
+  questProgress  UserQuest[]
+  challengeParts ChallengeParticipation[]
+  projects       Project[]
+  writings       Writing[]
+  writingFolders WritingFolder[]
+  sentMessages   Message[]   @relation("sender")
+  receivedMessages Message[] @relation("recipient")
+  sentMentorRequests MentorshipRequest[] @relation("student")
+  receivedMentorRequests MentorshipRequest[] @relation("mentor")
+  sentFeedback  Feedback[] @relation("author")
+  receivedFeedback Feedback[] @relation("reviewer")
+  corpseSegments ExquisiteCorpseLink[]
+  staircases   StaircaseRun[]
+
+  @@index([email])
+  @@index([role])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model ExerciseType {
+  id                String           @id @default(uuid()) @db.Uuid
+  slug              String           @unique @db.VarChar(100)
+  title             String           @db.VarChar(200)
+  category          ExerciseCategory
+  accessLevel       UserRole         @default(NOVICE) @map("access_level")
+  description       String           @db.Text
+  durationSeconds   Int              @map("duration_seconds")
+  wordTargetMin     Int              @map("word_target_min")
+  wordTargetMax     Int              @map("word_target_max")
+  bankSourceType    BankType?        @map("bank_source_type")
+  rubricJson        Json             @default("{}") @map("rubric_json")
+  skillWeightsJson  Json             @default("{}") @map("skill_weights_json")
+  baseXp            Int              @default(30) @map("base_xp")
+  difficultyBase    Float            @default(1.0) @map("difficulty_base")
+  isActive          Boolean          @default(true) @map("is_active")
+  displayOrder      Int              @default(0) @map("display_order")
+  iconAsset         String?          @map("icon_asset")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  sessions          ExerciseSession[]
+  recommendations   RecommendationQueue[]
+
+  @@index([category, isActive])
+  @@index([accessLevel])
+  @@map("exercise_types")
+}
+
+model ExerciseSession {
+  id                String        @id @default(uuid()) @db.Uuid
+  userId            String        @map("user_id") @db.Uuid
+  exerciseTypeId    String        @map("exercise_type_id") @db.Uuid
+  status            SessionStatus @default(IN_PROGRESS)
+  startedAt         DateTime      @default(now()) @map("started_at")
+  endedAt           DateTime?     @map("ended_at")
+  sourceItemId      String?       @map("source_item_id") @db.Uuid
+  sourceItemType    BankType?     @map("source_item_type")
+  promptSnapshotJson Json         @default("{}") @map("prompt_snapshot_json")
+  rerollCount       Int           @default(0) @map("reroll_count")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  deletedAt         DateTime?     @map("deleted_at")
+
+  user              User          @relation(fields: [userId], references: [id])
+  exerciseType      ExerciseType  @relation(fields: [exerciseTypeId], references: [id])
+  drafts            Draft[]
+  submission        Submission?
+  events            EventLog[]
+
+  @@index([userId, status])
+  @@index([exerciseTypeId])
+  @@index([startedAt])
+  @@map("exercise_sessions")
+}
+
+model Draft {
+  id             String          @id @default(uuid()) @db.Uuid
+  sessionId      String          @map("session_id") @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  contentText    String          @map("content_text") @db.Text
+  wordCount      Int             @default(0) @map("word_count")
+  versionNumber  Int             @map("version_number")
+  saveTrigger    DraftSaveTrigger @map("save_trigger")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  session        ExerciseSession @relation(fields: [sessionId], references: [id])
+  user           User            @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, versionNumber])
+  @@index([userId, createdAt])
+  @@map("drafts")
+}
+
+model Submission {
+  id                  String          @id @default(uuid()) @db.Uuid
+  sessionId           String          @unique @map("session_id") @db.Uuid
+  userId              String          @map("user_id") @db.Uuid
+  finalDraftId        String          @map("final_draft_id") @db.Uuid
+  submittedAt         DateTime        @default(now()) @map("submitted_at")
+  wordCount           Int             @map("word_count")
+  durationSeconds     Int             @map("duration_seconds")
+  constraintCheckJson Json            @default("{}") @map("constraint_check_json")
+  integrityResult     IntegrityResult @default(PASSED) @map("integrity_result")
+  xpAwarded           Int             @default(0) @map("xp_awarded")
+  xpPending           Boolean         @default(false) @map("xp_pending")
+  pausesCount         Int             @default(0) @map("pauses_count")
+  deletionCount       Int             @default(0) @map("deletion_count")
+
+  session             ExerciseSession @relation(fields: [sessionId], references: [id])
+  user                User            @relation(fields: [userId], references: [id])
+  integrityChecks     IntegrityCheck[]
+
+  @@index([userId, submittedAt])
+  @@index([integrityResult])
+  @@map("submissions")
+}
+
+model EventLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  sessionType     String?  @map("session_type") @db.VarChar(50)
+  sessionId       String?  @map("session_id") @db.Uuid
+  eventName       String   @map("event_name") @db.VarChar(100)
+  eventPayloadJson Json    @default("{}") @map("event_payload_json")
+  clientTimestamp DateTime? @map("client_timestamp")
+  serverTimestamp DateTime @default(now()) @map("server_timestamp")
+  ipHash          String?  @map("ip_hash") @db.VarChar(64)
+  userAgentHash   String?  @map("user_agent_hash") @db.VarChar(64)
+
+  user            User     @relation(fields: [userId], references: [id])
+  // DECISION: spec's EventLog lacked the opposite relation field for ExerciseSession.events
+  // (Prisma requires both sides of a relation). sessionId stays a plain column (nullable,
+  // may reference non-exercise session types), so the relation is implicit (no back-ref field).
+  session         ExerciseSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([userId, serverTimestamp])
+  @@index([eventName, serverTimestamp])
+  @@index([sessionId])
+  @@map("event_logs")
+}
+
+model Character {
+  id              String         @id @default(uuid()) @db.Uuid
+  name            String         @db.VarChar(100)
+  gender          String?        @db.VarChar(20)
+  ageRange        String?        @map("age_range") @db.VarChar(20)
+  temperament     String?        @db.VarChar(50)
+  tone            String?        @db.VarChar(50)
+  background      String?        @db.Text
+  occupation      String?        @db.VarChar(100)
+  socialClass     String?        @map("social_class") @db.VarChar(50)
+  historicalEra   String?        @map("historical_era") @db.VarChar(50)
+  region          String?        @db.VarChar(100)
+  tags            String[]       @default([])
+  source          String         @default("system")
+  createdByUserId String?        @map("created_by_user_id") @db.Uuid
+  approvalStatus  ApprovalStatus @default(APPROVED) @map("approval_status")
+  qualityScore    Float          @default(1.0) @map("quality_score")
+  globalUses      Int            @default(0) @map("global_uses")
+  isActive        Boolean        @default(true) @map("is_active")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  usages          CharacterUsage[]
+
+  @@index([approvalStatus, isActive])
+  @@index([gender, ageRange])
+  @@map("characters")
+}
+
+model CharacterUsage {
+  id          String   @id @default(uuid()) @db.Uuid
+  characterId String   @map("character_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  sessionId   String?  @map("session_id") @db.Uuid
+  cycleId     String?  @map("cycle_id") @db.Uuid
+  usedAt      DateTime @default(now()) @map("used_at")
+
+  character   Character @relation(fields: [characterId], references: [id])
+
+  @@index([userId, usedAt])
+  @@index([characterId])
+  @@map("character_usages")
+}
+
+model Place {
+  id              String         @id @default(uuid()) @db.Uuid
+  name            String         @db.VarChar(100)
+  type            String         @db.VarChar(50)
+  suggestedSenses String[]       @default([]) @map("suggested_senses")
+  description     String?        @db.Text
+  approvalStatus  ApprovalStatus @default(APPROVED) @map("approval_status")
+  isActive        Boolean        @default(true) @map("is_active")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  @@map("places")
+}
+
+model OpeningLine {
+  id             String         @id @default(uuid()) @db.Uuid
+  text           String         @db.Text
+  genre          String?        @db.VarChar(50)
+  mood           String?        @db.VarChar(50)
+  difficulty     Int            @default(1)
+  approvalStatus ApprovalStatus @default(APPROVED) @map("approval_status")
+  isActive       Boolean        @default(true) @map("is_active")
+
+  @@map("opening_lines")
+}
+
+model StyleParagraph {
+  id             String         @id @default(uuid()) @db.Uuid
+  originalText   String         @map("original_text") @db.Text
+  translation    String?        @db.Text
+  author         String?        @db.VarChar(100)
+  work           String?        @db.VarChar(200)
+  translator     String?        @db.VarChar(100)
+  year           Int?
+  language       String         @default("fa") @db.VarChar(10)
+  styleFeature   String?        @map("style_feature") @db.Text
+  copyrightStatus String        @default("public_domain") @map("copyright_status")
+  approvalStatus ApprovalStatus @default(APPROVED) @map("approval_status")
+  isActive       Boolean        @default(true) @map("is_active")
+
+  @@map("style_paragraphs")
+}
+
+model ReferenceStory {
+  id              String         @id @default(uuid()) @db.Uuid
+  title           String         @db.VarChar(200)
+  text            String         @db.Text
+  author          String?        @db.VarChar(100)
+  translator      String?        @db.VarChar(100)
+  year            Int?
+  length          Int
+  genre           String?        @db.VarChar(50)
+  copyrightStatus String         @default("public_domain") @map("copyright_status")
+  approvalStatus  ApprovalStatus @default(APPROVED) @map("approval_status")
+  isActive        Boolean        @default(true) @map("is_active")
+
+  @@map("reference_stories")
+}
+
+model NewsItem {
+  id             String         @id @default(uuid()) @db.Uuid
+  title          String         @db.VarChar(500)
+  summary        String         @db.Text
+  fullText       String?        @map("full_text") @db.Text
+  sourceName     String         @map("source_name") @db.VarChar(100)
+  sourceUrl      String         @map("source_url") @db.Text
+  publishedAt    DateTime       @map("published_at")
+  fetchedAt      DateTime       @default(now()) @map("fetched_at")
+  category       String         @db.VarChar(50)
+  hash           String         @unique @db.VarChar(64)
+  status         ApprovalStatus @default(PENDING)
+  isSensitive    Boolean        @default(false) @map("is_sensitive")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  @@index([status, publishedAt])
+  @@index([category])
+  @@map("news_items")
+}
+
+model ImageAsset {
+  id             String         @id @default(uuid()) @db.Uuid
+  url            String         @db.Text
+  thumbnailUrl   String?        @map("thumbnail_url") @db.Text
+  description    String?        @db.Text
+  photographer   String?        @db.VarChar(200)
+  license        String         @db.VarChar(50)
+  licenseUrl     String?        @map("license_url") @db.Text
+  source         String         @db.VarChar(500)
+  topic          String?        @db.VarChar(100)
+  mood           String?        @db.VarChar(50)
+  category       String?        @db.VarChar(50)
+  approvalStatus ApprovalStatus @default(APPROVED) @map("approval_status")
+  isActive       Boolean        @default(true) @map("is_active")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  @@map("image_assets")
+}
+
+model ObjectItem {
+  id             String         @id @default(uuid()) @db.Uuid
+  name           String         @db.VarChar(200)
+  category       String         @db.VarChar(50)
+  description    String?        @db.Text
+  imageUrl       String?        @map("image_url") @db.Text
+  approvalStatus ApprovalStatus @default(APPROVED) @map("approval_status")
+  isActive       Boolean        @default(true) @map("is_active")
+
+  @@map("object_items")
+}
+
+model EmotionLexicon {
+  id             String         @id @default(uuid()) @db.Uuid
+  word           String         @db.VarChar(100)
+  emotion        String         @db.VarChar(50)
+  intensity      Int            @default(3)
+  showSample     String?        @map("show_sample") @db.Text
+  synonyms       String[]       @default([])
+  approvalStatus ApprovalStatus @default(APPROVED) @map("approval_status")
+  isActive       Boolean        @default(true) @map("is_active")
+
+  @@index([emotion])
+  @@map("emotion_lexicon")
+}
+
+model WhatIfQuestion {
+  id             String         @id @default(uuid()) @db.Uuid
+  question       String         @db.Text
+  target         String         @db.VarChar(50)
+  difficulty     Int            @default(1)
+  approvalStatus ApprovalStatus @default(APPROVED) @map("approval_status")
+  isActive       Boolean        @default(true) @map("is_active")
+
+  @@map("what_if_questions")
+}
+
+model StructurePhrase {
+  id             String         @id @default(uuid()) @db.Uuid
+  text           String         @db.VarChar(200)
+  stage          String         @db.VarChar(50)
+  approvalStatus ApprovalStatus @default(APPROVED) @map("approval_status")
+  isActive       Boolean        @default(true) @map("is_active")
+
+  @@map("structure_phrases")
+}
+
+model Word {
+  id             String         @id @default(uuid()) @db.Uuid
+  text           String         @unique @db.VarChar(100)
+  pos            String?        @db.VarChar(20)
+  frequency      Int            @default(0)
+  semanticTags   String[]       @default([]) @map("semantic_tags")
+  isConcrete     Boolean        @default(false) @map("is_concrete")
+  embedding      Json?          @map("embedding")
+  isActive       Boolean        @default(true) @map("is_active")
+
+  @@index([pos])
+  @@map("words")
+}
+
+model CutupText {
+  id             String         @id @default(uuid()) @db.Uuid
+  text           String         @db.Text
+  source         String?        @db.VarChar(100)
+  length         Int
+  textType       String         @map("text_type") @db.VarChar(50)
+  approvalStatus ApprovalStatus @default(APPROVED) @map("approval_status")
+  isActive       Boolean        @default(true) @map("is_active")
+
+  @@map("cutup_texts")
+}
+
+model AmbientAudio {
+  id       String  @id @default(uuid()) @db.Uuid
+  name     String  @db.VarChar(100)
+  type     String  @db.VarChar(50)
+  fileUrl  String  @map("file_url") @db.Text
+  license  String  @db.VarChar(50)
+  isActive Boolean @default(true) @map("is_active")
+
+  @@map("ambient_audios")
+}
+
+model StructureTemplate {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String  @db.VarChar(100)
+  slug        String  @unique @db.VarChar(100)
+  steps       Json
+  description String  @db.Text
+  example     String? @db.Text
+  isActive    Boolean @default(true) @map("is_active")
+
+  @@map("structure_templates")
+}
+
+model UserCycle {
+  id              String     @id @default(uuid()) @db.Uuid
+  userId          String     @map("user_id") @db.Uuid
+  bankType        BankType   @map("bank_type")
+  cycleNo         Int        @map("cycle_no")
+  itemIdsJson     Json       @map("item_ids_json")
+  usedItemIdsJson Json       @default("[]") @map("used_item_ids_json")
+  startedAt       DateTime   @default(now()) @map("started_at")
+  completedAt     DateTime?  @map("completed_at")
+  isActive        Boolean    @default(true) @map("is_active")
+
+  user            User       @relation(fields: [userId], references: [id])
+
+  @@unique([userId, bankType, cycleNo])
+  @@index([userId, bankType, isActive])
+  @@map("user_cycles")
+}
+
+model SelectionLog {
+  id                String             @id @default(uuid()) @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
+  sessionId         String?            @map("session_id") @db.Uuid
+  bankType          BankType           @map("bank_type")
+  itemId            String             @map("item_id") @db.Uuid
+  algorithm         SelectionAlgorithm
+  cycleId           String?            @map("cycle_id") @db.Uuid
+  cyclePosition     String?            @map("cycle_position") @db.VarChar(20)
+  weightsSnapshotJson Json             @default("{}") @map("weights_snapshot_json")
+  filtersJson       Json               @default("[]") @map("filters_json")
+  alternativesCount Int                @map("alternatives_count")
+  seed              String?            @db.VarChar(100)
+  rerollNo          Int                @default(0) @map("reroll_no")
+  createdAt         DateTime           @default(now()) @map("created_at")
+
+  user              User               @relation(fields: [userId], references: [id])
+
+  @@index([userId, bankType, createdAt])
+  @@map("selection_logs")
+}
+
+model ExerciseSeries {
+  id              String       @id @default(uuid()) @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  seriesType      SeriesType   @map("series_type")
+  contextId       String?      @map("context_id") @db.Uuid
+  remainingJson   Json         @default("[]") @map("remaining_json")
+  doneJson        Json         @default("[]") @map("done_json")
+  status          SeriesStatus @default(ACTIVE)
+  lastActiveAt    DateTime     @default(now()) @map("last_active_at")
+
+  user            User         @relation(fields: [userId], references: [id])
+
+  @@index([userId, seriesType, status])
+  @@map("exercise_series")
+}
+
+model StaircaseRun {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  rungIndex    Int      @default(0) @map("rung_index")
+  // Per-day hits for the current rung: JSON array of ISO date strings.
+  // e.g. ["2026-11-01", "2026-11-02"] — 2 of the 3 required successful days.
+  dayHitsJson  Json     @default("[]") @map("day_hits_json")
+  status       SeriesStatus @default(ACTIVE)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId])
+  @@index([userId, status])
+  @@map("staircase_runs")
+}
+
+model XPLedger {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  sourceType      String   @map("source_type") @db.VarChar(50)
+  sourceId        String?  @map("source_id") @db.Uuid
+  base            Int
+  multipliersJson Json     @default("{}") @map("multipliers_json")
+  finalXp         Int      @map("final_xp")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([sourceType])
+  @@map("xp_ledger")
+}
+
+model UserStats {
+  userId            String   @id @map("user_id") @db.Uuid
+  xpTotal           Int      @default(0) @map("xp_total")
+  level             Int      @default(1)
+  roleRank          UserRole @default(NOVICE) @map("role_rank")
+  wordsTotal        Int      @default(0) @map("words_total")
+  activeDays        Int      @default(0) @map("active_days")
+  currentStreak     Int      @default(0) @map("current_streak")
+  bestStreak        Int      @default(0) @map("best_streak")
+  freezesRemaining  Int      @default(0) @map("freezes_remaining")
+  lastActiveDate    DateTime? @map("last_active_date") @db.Date
+  sessionsCount     Int      @default(0) @map("sessions_count")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user              User     @relation(fields: [userId], references: [id])
+
+  @@map("user_stats")
+}
+
+model UserSkill {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String   @map("user_id") @db.Uuid
+  skillKey           String   @map("skill_key") @db.VarChar(50)
+  xpTotal            Int      @default(0) @map("xp_total")
+  level              Int      @default(1)
+  sessionsCount      Int      @default(0) @map("sessions_count")
+  mentorPositiveCount Int     @default(0) @map("mentor_positive_count")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user               User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, skillKey])
+  @@index([skillKey])
+  @@map("user_skills")
+}
+
+model StreakDay {
+  id       String          @id @default(uuid()) @db.Uuid
+  userId   String          @map("user_id") @db.Uuid
+  date     DateTime        @db.Date
+  status   StreakDayStatus
+  reason   String?         @db.VarChar(100)
+
+  user     User            @relation(fields: [userId], references: [id])
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("streak_days")
+}
+
+model Badge {
+  id             String      @id @default(uuid()) @db.Uuid
+  slug           String      @unique @db.VarChar(100)
+  family         BadgeFamily
+  tier           BadgeTier
+  titleFa        String      @map("title_fa") @db.VarChar(200)
+  descriptionFa  String      @map("description_fa") @db.Text
+  iconAsset      String?     @map("icon_asset")
+  isHidden       Boolean     @default(false) @map("is_hidden")
+  isActive       Boolean     @default(true) @map("is_active")
+  displayOrder   Int         @default(0) @map("display_order")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  rules          BadgeRule[]
+  awards         BadgeAward[]
+  progress       BadgeProgress[]
+
+  @@index([family, tier])
+  @@map("badges")
+}
+
+model BadgeRule {
+  id                     String            @id @default(uuid()) @db.Uuid
+  badgeId                String            @map("badge_id") @db.Uuid
+  triggerEvent           String            @map("trigger_event") @db.VarChar(100)
+  conditionDslJson       Json              @map("condition_dsl_json")
+  verificationQueryJson  Json?             @map("verification_query_json")
+  cooldownSeconds        Int               @default(0) @map("cooldown_seconds")
+  verificationLevel      VerificationLevel @default(A_AUTOMATIC) @map("verification_level")
+  isActive               Boolean           @default(true) @map("is_active")
+
+  badge                  Badge             @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@index([triggerEvent, isActive])
+  @@map("badge_rules")
+}
+
+model BadgeAward {
+  id               String            @id @default(uuid()) @db.Uuid
+  userId           String            @map("user_id") @db.Uuid
+  badgeId          String            @map("badge_id") @db.Uuid
+  tier             BadgeTier
+  awardedAt        DateTime          @default(now()) @map("awarded_at")
+  triggerEventId   String?           @map("trigger_event_id") @db.Uuid
+  contextJson      Json              @default("{}") @map("context_json")
+  narrativeFa      String            @map("narrative_fa") @db.Text
+  verifiedAt       DateTime?         @map("verified_at")
+  verifiedBy       String?           @map("verified_by") @db.VarChar(50)
+  revokedAt        DateTime?         @map("revoked_at")
+  revokeReason     String?           @map("revoke_reason") @db.Text
+
+  user             User              @relation(fields: [userId], references: [id])
+  badge            Badge             @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId, tier])
+  @@index([userId, awardedAt])
+  @@map("badge_awards")
+}
+
+model BadgeProgress {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  badgeId     String   @map("badge_id") @db.Uuid
+  current     Int      @default(0)
+  target      Int
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user        User     @relation(fields: [userId], references: [id])
+  badge       Badge    @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@map("badge_progress")
+}
+
+model Quest {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique @db.VarChar(100)
+  titleFa     String   @map("title_fa") @db.VarChar(200)
+  type        String   @db.VarChar(20)
+  conditionJson Json   @map("condition_json")
+  rewardXp    Int      @default(0) @map("reward_xp")
+  rewardInk   Int      @default(0) @map("reward_ink")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  userQuests  UserQuest[]
+
+  @@map("quests")
+}
+
+model UserQuest {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  questId     String   @map("quest_id") @db.Uuid
+  progress    Int      @default(0)
+  target      Int
+  completedAt DateTime? @map("completed_at")
+  dateKey     String   @map("date_key") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id])
+  quest       Quest    @relation(fields: [questId], references: [id])
+
+  @@unique([userId, questId, dateKey])
+  @@index([userId, dateKey])
+  @@map("user_quests")
+}
+
+model Challenge {
+  id             String   @id @default(uuid()) @db.Uuid
+  slug           String   @unique @db.VarChar(100)
+  titleFa        String   @map("title_fa") @db.VarChar(200)
+  descriptionFa  String   @map("description_fa") @db.Text
+  startDate      DateTime @map("start_date")
+  endDate        DateTime @map("end_date")
+  bonusMultiplier Float   @default(1.5) @map("bonus_multiplier")
+  specialBadgeId String?  @map("special_badge_id") @db.Uuid
+  isActive       Boolean  @default(true) @map("is_active")
+
+  participations ChallengeParticipation[]
+
+  @@map("challenges")
+}
+
+model ChallengeParticipation {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  challengeId String    @map("challenge_id") @db.Uuid
+  sessionsCount Int     @default(0) @map("sessions_count")
+  completedAt DateTime? @map("completed_at")
+  awardedBadgeId String? @map("awarded_badge_id") @db.Uuid
+
+  user        User      @relation(fields: [userId], references: [id])
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+
+  @@unique([userId, challengeId])
+  @@map("challenge_participations")
+}
+
+model InkWallet {
+  userId    String   @id @map("user_id") @db.Uuid
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("ink_wallets")
+}
+
+model InkTransaction {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  delta       Int
+  reason      String   @db.VarChar(100)
+  sourceId    String?  @map("source_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("ink_transactions")
+}
+
+model ShopItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique @db.VarChar(100)
+  titleFa     String   @map("title_fa") @db.VarChar(200)
+  type        String   @db.VarChar(50)
+  priceInk    Int      @map("price_ink")
+  payloadJson Json     @default("{}") @map("payload_json")
+  isActive    Boolean  @default(true) @map("is_active")
+
+  @@map("shop_items")
+}
+
+model IntegrityCheck {
+  id            String              @id @default(uuid()) @db.Uuid
+  submissionId  String              @map("submission_id") @db.Uuid
+  checkType     IntegrityCheckType  @map("check_type")
+  result        IntegrityResult
+  detailsJson   Json                @default("{}") @map("details_json")
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  submission    Submission          @relation(fields: [submissionId], references: [id])
+
+  @@index([submissionId])
+  @@map("integrity_checks")
+}
+
+model AnomalyFlag {
+  id            String           @id @default(uuid()) @db.Uuid
+  userId        String           @map("user_id") @db.Uuid
+  anomalyType   AnomalyType      @map("anomaly_type")
+  severity      AnomalySeverity
+  evidenceJson  Json             @default("{}") @map("evidence_json")
+  resolvedAt    DateTime?        @map("resolved_at")
+  resolvedBy    String?          @map("resolved_by") @db.Uuid
+  resolutionNote String?         @map("resolution_note") @db.Text
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  user          User             @relation(fields: [userId], references: [id])
+
+  @@index([userId, resolvedAt])
+  @@index([severity, resolvedAt])
+  @@map("anomaly_flags")
+}
+
+model RecommendationQueue {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  exerciseTypeId String   @map("exercise_type_id") @db.Uuid
+  reasonJson     Json     @default("{}") @map("reason_json")
+  priority       Int      @default(0)
+  createdAt      DateTime @default(now()) @map("created_at")
+  servedAt       DateTime? @map("served_at")
+
+  user           User         @relation(fields: [userId], references: [id])
+  exerciseType   ExerciseType @relation(fields: [exerciseTypeId], references: [id])
+
+  @@index([userId, servedAt, priority])
+  @@map("recommendation_queue")
+}
+
+model Notification {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  type        String   @db.VarChar(50)
+  titleFa     String   @map("title_fa") @db.VarChar(200)
+  bodyFa      String   @map("body_fa") @db.Text
+  payloadJson Json     @default("{}") @map("payload_json")
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model SystemSetting {
+  key         String   @id @db.VarChar(100)
+  valueJson   Json     @map("value_json")
+  updatedBy   String?  @map("updated_by") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorId     String?  @map("actor_id") @db.Uuid
+  action      String   @db.VarChar(100)
+  targetType  String?  @map("target_type") @db.VarChar(50)
+  targetId    String?  @map("target_id") @db.Uuid
+  beforeJson  Json?    @map("before_json")
+  afterJson   Json?    @map("after_json")
+  reason      String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+// ── New feature models (Phase 2+) ─────────────────────────────────────────────
+
+enum ProjectType {
+  STORY
+  NOVEL
+}
+
+enum ProjectStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETE
+}
+
+enum MentorshipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum FeedbackTargetKind {
+  SUBMISSION
+  WRITING
+  PROJECT
+}
+
+enum CorpseStatus {
+  OPEN
+  CLOSED
+}
+
+model BlogPost {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique @db.VarChar(200)
+  titleFa     String   @map("title_fa") @db.VarChar(300)
+  excerptFa   String   @map("excerpt_fa") @db.Text
+  bodyMarkdown String  @map("body_markdown") @db.Text
+  authorId    String?  @map("author_id") @db.Uuid
+  publishedAt DateTime @map("published_at")
+  status      String   @default("PUBLISHED") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([publishedAt, status])
+  @@map("blog_posts")
+}
+
+model Project {
+  id             String        @id @default(uuid()) @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  title          String        @db.VarChar(300)
+  type           ProjectType   @default(STORY)
+  description    String?       @db.Text
+  targetWords    Int           @default(5000) @map("target_words")
+  wordCountTotal Int           @default(0) @map("word_count_total")
+  status         ProjectStatus @default(DRAFT)
+  displayOrder   Int           @default(0) @map("display_order")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  deletedAt      DateTime?     @map("deleted_at")
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapters       ProjectChapter[]
+
+  @@index([userId, status])
+  @@map("projects")
+}
+
+model ProjectChapter {
+  id            String   @id @default(uuid()) @db.Uuid
+  projectId     String   @map("project_id") @db.Uuid
+  title         String   @db.VarChar(300)
+  contentText   String   @default("") @map("content_text") @db.Text
+  wordCount     Int      @default(0) @map("word_count")
+  displayOrder  Int      @default(0) @map("display_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, displayOrder])
+  @@map("project_chapters")
+}
+
+model Writing {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  title          String   @db.VarChar(300)
+  contentText    String   @default("") @map("content_text") @db.Text
+  wordCount      Int      @default(0) @map("word_count")
+  sourceSessionId String? @map("source_session_id") @db.Uuid
+  projectId      String?  @map("project_id") @db.Uuid
+  folderId       String?  @map("folder_id") @db.Uuid
+  tags           String[] @default([])
+  status         String   @default("DRAFT") @db.VarChar(20)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder         WritingFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, folderId])
+  @@map("writings")
+}
+
+model WritingFolder {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  name       String   @db.VarChar(100)
+  displayOrder Int    @default(0) @map("display_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  writings   Writing[]
+
+  @@index([userId])
+  @@map("writing_folders")
+}
+
+model MentorshipRequest {
+  id           String           @id @default(uuid()) @db.Uuid
+  studentId    String           @map("student_id") @db.Uuid
+  mentorId     String           @map("mentor_id") @db.Uuid
+  message      String           @db.Text
+  status       MentorshipStatus @default(PENDING)
+  acceptedAt   DateTime?        @map("accepted_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  student      User             @relation("student", fields: [studentId], references: [id], onDelete: Cascade)
+  mentor       User             @relation("mentor", fields: [mentorId], references: [id], onDelete: Cascade)
+
+  @@index([mentorId, status])
+  @@index([studentId])
+  @@map("mentorship_requests")
+}
+
+model Message {
+  id           String    @id @default(uuid()) @db.Uuid
+  senderId     String    @map("sender_id") @db.Uuid
+  recipientId  String    @map("recipient_id") @db.Uuid
+  body         String    @db.Text
+  readAt       DateTime? @map("read_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  sender       User      @relation("sender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient    User      @relation("recipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, readAt])
+  @@index([senderId])
+  @@index([senderId, recipientId, createdAt])
+  @@map("messages")
+}
+
+model Feedback {
+  id          String             @id @default(uuid()) @db.Uuid
+  authorId    String             @map("author_id") @db.Uuid
+  reviewerId  String             @map("reviewer_id") @db.Uuid
+  targetKind  FeedbackTargetKind @map("target_kind")
+  targetId    String             @map("target_id") @db.Uuid
+  content     String             @db.Text
+  rating      Int?
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  author      User               @relation("author", fields: [authorId], references: [id], onDelete: Cascade)
+  reviewer    User               @relation("reviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([targetKind, targetId])
+  @@index([reviewerId, createdAt])
+  @@map("feedback")
+}
+
+model ExquisiteCorpseChain {
+  id           String       @id @default(uuid()) @db.Uuid
+  status       CorpseStatus @default(OPEN)
+  round        Int          @default(1)
+  maxRounds    Int          @default(5) @map("max_rounds")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  segments     ExquisiteCorpseLink[]
+
+  @@map("exquisite_corpse_chains")
+}
+
+model ExquisiteCorpseLink {
+  id           String   @id @default(uuid()) @db.Uuid
+  chainId      String   @map("chain_id") @db.Uuid
+  authorId     String   @map("author_id") @db.Uuid
+  segmentText  String   @map("segment_text") @db.Text
+  round        Int
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  chain        ExquisiteCorpseChain @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  author       User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([chainId, round])
+  @@map("exquisite_corpse_links")
+}

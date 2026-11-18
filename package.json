@@ -1,0 +1,22 @@
+{
+  "name": "kargah",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n api,web,nlp -c blue,green,yellow \"pnpm --filter api start:dev\" \"pnpm --filter web dev\" \"pnpm run dev:nlp\"",
+    "dev:nlp": "cd apps/nlp && (source venv/bin/activate || venv\\Scripts\\activate) && uvicorn app.main:app --host 0.0.0.0 --port 12589 --reload",
+    "dev:api": "pnpm --filter api start:dev",
+    "dev:web": "pnpm --filter web dev",
+    "db:migrate": "pnpm --filter api prisma migrate dev",
+    "db:seed": "pnpm --filter api prisma db seed",
+    "db:studio": "pnpm --filter api prisma studio",
+    "db:reset": "pnpm --filter api prisma migrate reset --force",
+    "setup": "pnpm install && pnpm db:migrate && pnpm db:seed",
+    "build": "pnpm --filter api build && pnpm --filter web build",
+    "test": "pnpm --filter api test && pnpm --filter web test"
+  },
+  "devDependencies": {
+    "concurrently": "8.2.2",
+    "typescript": "5.4.5"
+  }
+}

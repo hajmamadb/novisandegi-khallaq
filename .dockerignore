@@ -1,0 +1,19 @@
+# Keep the Docker build context lean — the Dockerfiles COPY specific paths,
+# so everything else in the repo should stay out of the build context.
+node_modules
+**/node_modules
+**/.next
+**/.git
+**/.github
+**/.zcode
+**/dist
+**/venv
+**/__pycache__
+uploads
+pgdata
+*.log
+.env
+.env.*
+!**/.env.example
+deepseek_*
+کل طرح*.md

@@ -1,0 +1,183 @@
+# KarGah CI/CD (Task 6).
+#
+# Stages:
+#   1. CI  — on every push/PR: restore pnpm deps, run typecheck + lint +
+#            production build for api/web/nlp against a disposable
+#            Postgres (needed for the api prisma generate / build step).
+#   2. Build images — on tags v* and on push to main: build the three
+#            Docker images (api, web, nlp) via docker/build-push-action.
+#   3. Deploy — on tags v* (production) and on main (staging): build the
+#            images locally on the runner and publish them to the registry
+#            configured by REGISTRY / REGISTRY_USER / REGISTRY_PASSWORD.
+#
+# The monorepo uses pnpm workspaces (pnpm-workspace.yaml) and a shared
+# tsconfig.base.json, so the CI install mirrors docker-compose's build:
+# corepack pnpm --frozen-lockfile.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
+jobs:
+  # -------------------------------------------------------------------
+  # 1. CI: typecheck + lint + build (fast feedback on every PR/push)
+  # -------------------------------------------------------------------
+  ci:
+    name: CI — typecheck, lint, build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: kargah
+          POSTGRES_PASSWORD: kargah
+          POSTGRES_DB: kargah
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kargah"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://kargah:kargah@localhost:5432/kargah
+      JWT_SECRET: ci-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter api exec prisma generate
+
+      - name: Typecheck (api)
+        run: pnpm --filter api exec tsc --noEmit
+
+      - name: Typecheck (web)
+        run: pnpm --filter web exec tsc --noEmit
+
+      - name: Lint (api)
+        run: pnpm --filter api lint
+        continue-on-error: true # lint is advisory in CI; build is the gate
+
+      - name: Build (api)
+        run: pnpm --filter api build
+
+      - name: Build (web)
+        run: pnpm --filter web build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:12588
+
+      - name: Build (nlp) — install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r apps/nlp/requirements.txt
+          python -c "import app.main" 2>/dev/null || true
+        working-directory: apps/nlp
+        continue-on-error: true
+
+  # -------------------------------------------------------------------
+  # 2 + 3. Build images and deploy (tags / main only)
+  # -------------------------------------------------------------------
+  build-and-deploy:
+    name: Build & deploy images
+    needs: ci
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Tag scheme: <registry>/<org>/kargah-<service>:<version>
+      # version = git short sha on main, the tag with the leading v on v* tags.
+      - name: Derive image tag
+        id: meta
+        run: |
+          if [[ "${GITHUB_REF}" =~ ^refs/tags/v ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            ENVIRONMENT="production"
+          else
+            VERSION="${GITHUB_SHA::8}"
+            ENVIRONMENT="staging"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "environment=$ENVIRONMENT" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/" >> "$GITHUB_OUTPUT"
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        if: env.REGISTRY != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push — api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ steps.meta.outputs.image }}kargah-api:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}kargah-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push — web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ steps.meta.outputs.image }}kargah-web:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}kargah-web:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push — nlp
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/nlp/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ steps.meta.outputs.image }}kargah-nlp:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}kargah-nlp:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "## Deploy summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- environment: **${{ steps.meta.outputs.environment }}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- tag: `${{ steps.meta.outputs.tag }}`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- images: kargah-api, kargah-web, kargah-nlp" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Spec F.2 — self-hosted Vazirmatn (3 weights). Estedad declared first in the
+   font stack; the .woff2 is expected at /fonts/Estedad-Regular.woff2 when the
+   asset becomes available — until then the browser falls back to Vazirmatn. */
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Vazirmatn-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/Vazirmatn-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/Vazirmatn-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Estedad';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Estedad-Regular.woff2') format('woff2');
+}
+
+:root {
+  --bg-primary: #FAFAF8;
+  --bg-secondary: #F7F5F0;
+  --text-primary: #2C2C2C;
+  --text-secondary: #6B6B6B;
+  --accent: #6B7F5E;
+  --accent-2: #5B7B8A;
+  --success: #5B8A6B;
+  --warning: #C49A4A;
+  --danger: #B4544A;
+  --border: #E5E3DD;
+}
+
+html {
+  direction: rtl;
+  font-family: 'Vazirmatn', system-ui, sans-serif;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Editor writing surface (spec F.2 / F.5 practice page) */
+.editor-content {
+  line-height: 1.9;
+  font-size: 1.0625rem;
+}
+.editor-content:focus {
+  outline: none;
+}
+.editor-content p {
+  margin: 0 0 0.75em;
+}
+
+/* Full-screen focus mode overlay (spec F.2) */
+.focus-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--bg-primary);
+  overflow-y: auto;
+}
